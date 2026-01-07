@@ -10,6 +10,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+
 // Route de test pour vérifier la liaison
 app.get('/', (req, res) => {
   res.send("Le serveur MafiaBackend est bien lié à la base NineEvent !");
