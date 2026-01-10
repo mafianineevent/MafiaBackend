@@ -98,6 +98,23 @@ app.get('/admin/users', async (req, res) => {
     }
 });
 
+
+
+
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* 9. ROUTE POUR MODIFIER LE SOLDE D'UN MEMBRE                                      */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+app.post('/admin/update-balance', async (req, res) => {
+    const { id, balance } = req.body;
+    try {
+        await pool.query('UPDATE users SET balance = $1 WHERE id = $2', [balance, id]);
+        res.json({ success: true, message: "Solde mis à jour" });
+    } catch (err) {
+        res.status(500).json({ error: "Erreur lors de la mise à jour" });
+    }
+});
+
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 /* FIN DU CODE ADMIN - LA SUITE EST TON CODE EXISTANT (Route 7 : app.listen...)    */
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
