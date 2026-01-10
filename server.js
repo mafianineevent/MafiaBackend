@@ -87,6 +87,46 @@ app.post('/quick-buy', async (req, res) => {
     }
 });
 
+
+
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* ROUTE DE RÉCUPÉRATION DU STATUT D'UN TICKET (POUR LA RECHERCHE)                  */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+app.get('/ticket-status/:id_public', async (req, res) => {
+    const { id_public } = req.params;
+
+    try {
+        // On cherche le ticket dans la table par son ID public (ex: 9E-A1B2C)
+        const result = await pool.query(
+            'SELECT ticket_id_public, event_name, telephone_client, prix_total, montant_paye, statut FROM tickets WHERE ticket_id_public = $1',
+            [id_public.toUpperCase()] // On force la majuscule pour éviter les erreurs de saisie
+        );
+
+        if (result.rows.length > 0) {
+            // Si le ticket existe, on le renvoie au client
+            res.json({ 
+                success: true, 
+                ticket: result.rows[0] 
+            });
+        } else {
+            // Si rien n'est trouvé
+            res.status(404).json({ 
+                success: false, 
+                message: "Aucun ticket trouvé avec cet ID." 
+            });
+        }
+    } catch (err) {
+        console.error("Erreur lors de la recherche du ticket:", err);
+        res.status(500).json({ 
+            success: false, 
+            error: "Erreur interne du serveur." 
+        });
+    }
+});
+
+
+
 // B. Route de paiement partiel par ID
 app.post('/pay-partial', async (req, res) => {
     const { ticket_id_public, montant } = req.body;
