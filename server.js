@@ -1,18 +1,26 @@
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* MAFIABACKEND : SERVEUR DE BILLETTERIE (STABLE POUR RENDER)                       */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+
 const app = express();
 
+// 1. Activation de CORS pour autoriser ton site à parler au serveur
 app.use(cors());
 app.use(express.json());
 
-// Liaison Base de Données
+// 2. Configuration PostgreSQL avec SSL forcé pour Render
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false // Indispensable pour éviter l'erreur de certificat sur Render
+    }
 });
 
-// Création des tables au démarrage
+// 3. Initialisation de la Table Users (Billetterie)
 const initDB = async () => {
     try {
         await pool.query(`
@@ -26,15 +34,17 @@ const initDB = async () => {
                 balance DECIMAL(15,2) DEFAULT 0.00
             );
         `);
-        console.log("✅ Base NineEvent prête");
-    } catch (err) { console.log("❌ Erreur DB:", err); }
+        console.log("✅ Base NineEvent connectée et table prête");
+    } catch (err) {
+        console.error("❌ Erreur lors de l'initialisation DB:", err);
+    }
 };
 initDB();
 
-// Route de test
+// 4. Route de test (Vérifie si le serveur est en vie)
 app.get('/', (req, res) => res.send("MafiaBackend Billetterie en ligne !"));
 
-// --- CONNEXION (Utilisée par ton bouton Profil) ---
+// 5. Route CONNEXION (Gère le cas de l'adresse manquante pour les anciens)
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
@@ -42,17 +52,19 @@ app.post('/login', async (req, res) => {
         const user = result.rows[0];
 
         if (user && user.password === password) {
-            // RÈGLE : Adresse obligatoire pour les anciens
+            // [RÈGLE] Vérification obligatoire de l'adresse
             if (!user.adresse || user.adresse.trim() === "") {
                 return res.json({ status: "need_address", message: "Adresse manquante." });
             }
             return res.json({ status: "success", user: user });
         }
         res.status(401).json({ message: "Identifiants incorrects" });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-// --- INSCRIPTION (Utilisée par ton bouton Valider Profil) ---
+// 6. Route INSCRIPTION
 app.post('/register', async (req, res) => {
     const { email, telephone, password, username, adresse } = req.body;
     try {
@@ -63,9 +75,12 @@ app.post('/register', async (req, res) => {
         );
         res.json({ success: true, user: result.rows[0] });
     } catch (e) {
-        res.status(500).json({ success: false, message: "Données déjà utilisées." });
+        res.status(500).json({ success: false, message: "Email ou Téléphone déjà utilisé." });
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Serveur sur port ${PORT}`));
+// 7. Écoute sur le port Render (process.env.PORT est capital ici)
+const PORT = process.env.PORT || 10000; 
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Serveur actif sur le port ${PORT}`);
+});
