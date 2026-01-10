@@ -24,7 +24,7 @@ const pool = new Pool({
 // 3. Initialisation des Tables (Users & Tickets)
 const initDB = async () => {
     try {
-        // Table existante
+        // 1. Table Users
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -34,15 +34,15 @@ const initDB = async () => {
                 username TEXT,
                 adresse TEXT,
                 balance DECIMAL(15,2) DEFAULT 0.00,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP 
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
 
-        // NOUVELLE TABLE : C'est elle qui permet le "petit à petit"
+        // 2. Table Tickets (On crée si elle n'existe pas)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS tickets (
                 id SERIAL PRIMARY KEY,
-                ticket_id_public TEXT UNIQUE NOT NULL, -- L'ID que le client va noter
+                ticket_id_public TEXT UNIQUE NOT NULL,
                 event_name TEXT NOT NULL,
                 telephone_client TEXT NOT NULL,
                 prix_total DECIMAL(15,2) NOT NULL,
@@ -51,14 +51,16 @@ const initDB = async () => {
             );
         `);
 
-
+        // 3. FORCE L'AJOUT DES COLONNES SI ELLES MANQUENT (Pour le Panel Admin)
+        await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+        await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS statut TEXT DEFAULT 'en_attente';`);
         
-        console.log("✅ Tables prêtes (Users + Tickets)");
+        console.log("✅ Base de données mise à jour et prête !");
     } catch (err) {
-        console.error("❌ Erreur DB:", err);
+        console.error("❌ Erreur lors de l'initialisation DB:", err.message);
     }
 };
-initDB(); 
+initDB();
 
 
 
