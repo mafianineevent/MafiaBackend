@@ -79,6 +79,35 @@ app.post('/register', async (req, res) => {
     }
 });
 
+
+
+
+
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* 8. PANEL ADMIN : RÉCUPÉRATION SANS CLÉ (MISE À JOUR)                             */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+app.get('/admin/users', async (req, res) => {
+    try {
+        // On récupère les membres directement
+        const result = await pool.query('SELECT id, username, email, telephone, adresse, balance FROM users ORDER BY id DESC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Erreur Admin:", err);
+        res.status(500).json({ error: "Erreur lors de la récupération des membres" });
+    }
+});
+
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* FIN DU CODE ADMIN - LA SUITE EST TON CODE EXISTANT (Route 7 : app.listen...)    */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+
+
+
+
+
+
 // 7. Écoute sur le port Render (process.env.PORT est capital ici)
 const PORT = process.env.PORT || 10000; 
 app.listen(PORT, '0.0.0.0', () => {
