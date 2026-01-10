@@ -33,7 +33,8 @@ const initDB = async () => {
                 password TEXT NOT NULL,
                 username TEXT,
                 adresse TEXT,
-                balance DECIMAL(15,2) DEFAULT 0.00
+                balance DECIMAL(15,2) DEFAULT 0.00,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP 
             );
         `);
 
@@ -152,22 +153,70 @@ app.post('/pay-partial', async (req, res) => {
 
 
 
-/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
-/* 8. PANEL ADMIN : RÉCUPÉRATION SANS CLÉ (MISE À JOUR)                             */
-/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
-
-
 
 
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
-/* 9. ROUTE POUR MODIFIER LE SOLDE D'UN MEMBRE                                      */
+/* 8. PANEL ADMIN : RÉCUPÉRATION DES TICKETS                                        */
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 
+app.get('/admin/tickets', async (req, res) => {
+    try {
+        // Récupère tous les tickets du plus récent au plus ancien
+        const result = await pool.query('SELECT * FROM tickets ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* 9. ROUTE POUR RÉCUPÉRER ET MODIFIER LES MEMBRES                                  */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+// Pour afficher la liste des membres dans l'admin
+app.get('/admin/users', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM users ORDER BY id ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Pour modifier le solde d'un membre
+app.post('/admin/update-balance', async (req, res) => {
+    const { id, balance } = req.body;
+    try {
+        await pool.query('UPDATE users SET balance = $1 WHERE id = $2', [balance, id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 /* FIN DU CODE ADMIN - LA SUITE EST TON CODE EXISTANT (Route 7 : app.listen...)    */
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* ROUTE DE SUPPRESSION D'UN TICKET (ADMIN)                                         */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 
+app.delete('/admin/delete-ticket/:id_public', async (req, res) => {
+    const { id_public } = req.params;
+    try {
+        const result = await pool.query('DELETE FROM tickets WHERE ticket_id_public = $1', [id_public.toUpperCase()]);
+        
+        if (result.rowCount > 0) {
+            res.json({ success: true, message: "Ticket supprimé avec succès." });
+        } else {
+            res.status(404).json({ success: false, message: "Ticket introuvable." });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 
 
