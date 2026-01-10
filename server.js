@@ -21,8 +21,10 @@ const pool = new Pool({
 });
 
 // 3. Initialisation de la Table Users (Billetterie)
+// 3. Initialisation des Tables (Users & Tickets)
 const initDB = async () => {
     try {
+        // Table existante
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -34,50 +36,77 @@ const initDB = async () => {
                 balance DECIMAL(15,2) DEFAULT 0.00
             );
         `);
-        console.log("✅ Base NineEvent connectée et table prête");
+
+        // NOUVELLE TABLE : C'est elle qui permet le "petit à petit"
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS tickets (
+                id SERIAL PRIMARY KEY,
+                ticket_id_public TEXT UNIQUE NOT NULL, -- L'ID que le client va noter
+                event_name TEXT NOT NULL,
+                telephone_client TEXT NOT NULL,
+                prix_total DECIMAL(15,2) NOT NULL,
+                montant_paye DECIMAL(15,2) DEFAULT 0.00,
+                statut TEXT DEFAULT 'en_attente'
+            );
+        `);
+
+
+        
+        console.log("✅ Tables prêtes (Users + Tickets)");
     } catch (err) {
-        console.error("❌ Erreur lors de l'initialisation DB:", err);
+        console.error("❌ Erreur DB:", err);
     }
 };
-initDB();
+initDB(); 
+
+
+
+
 
 // 4. Route de test (Vérifie si le serveur est en vie)
 app.get('/', (req, res) => res.send("MafiaBackend Billetterie en ligne !"));
 
-// 5. Route CONNEXION (Gère le cas de l'adresse manquante pour les anciens)
-app.post('/login', async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-        const user = result.rows[0];
 
-        if (user && user.password === password) {
-            // [RÈGLE] Vérification obligatoire de l'adresse
-            if (!user.adresse || user.adresse.trim() === "") {
-                return res.json({ status: "need_address", message: "Adresse manquante." });
-            }
-            return res.json({ status: "success", user: user });
-        }
-        res.status(401).json({ message: "Identifiants incorrects" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
-// 6. Route INSCRIPTION
-app.post('/register', async (req, res) => {
-    const { email, telephone, password, username, adresse } = req.body;
+
+
+// A. Route de création du ticket (Achat rapide)
+app.post('/quick-buy', async (req, res) => {
+    const { event_name, telephone, prix_total } = req.body;
+    // Génère un ID unique comme "9E-A1B2C"
+    const ticket_id_public = "9E-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
     try {
         const result = await pool.query(
-            `INSERT INTO users (email, telephone, password, username, adresse) 
-             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-            [email, telephone, password, username, adresse]
+            'INSERT INTO tickets (ticket_id_public, event_name, telephone_client, prix_total) VALUES ($1, $2, $3, $4) RETURNING *',
+            [ticket_id_public, event_name, telephone, prix_total]
         );
-        res.json({ success: true, user: result.rows[0] });
-    } catch (e) {
-        res.status(500).json({ success: false, message: "Email ou Téléphone déjà utilisé." });
+        res.json({ success: true, ticket: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 });
+
+// B. Route de paiement partiel par ID
+app.post('/pay-partial', async (req, res) => {
+    const { ticket_id_public, montant } = req.body;
+    try {
+        const result = await pool.query(
+            'UPDATE tickets SET montant_paye = montant_paye + $1 WHERE ticket_id_public = $2 RETURNING *',
+            [montant, ticket_id_public]
+        );
+        
+        const ticket = result.rows[0];
+        if (ticket.montant_paye >= ticket.prix_total) {
+            await pool.query("UPDATE tickets SET statut = 'paye' WHERE ticket_id_public = $1", [ticket_id_public]);
+        }
+        
+        res.json({ success: true, ticket: ticket });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 
 
 
@@ -87,17 +116,6 @@ app.post('/register', async (req, res) => {
 /* 8. PANEL ADMIN : RÉCUPÉRATION SANS CLÉ (MISE À JOUR)                             */
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 
-app.get('/admin/users', async (req, res) => {
-    try {
-        // On récupère les membres directement
-        const result = await pool.query('SELECT id, username, email, telephone, adresse, balance FROM users ORDER BY id DESC');
-        res.json(result.rows);
-    } catch (err) {
-        console.error("Erreur Admin:", err);
-        res.status(500).json({ error: "Erreur lors de la récupération des membres" });
-    }
-});
-
 
 
 
@@ -105,15 +123,6 @@ app.get('/admin/users', async (req, res) => {
 /* 9. ROUTE POUR MODIFIER LE SOLDE D'UN MEMBRE                                      */
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 
-app.post('/admin/update-balance', async (req, res) => {
-    const { id, balance } = req.body;
-    try {
-        await pool.query('UPDATE users SET balance = $1 WHERE id = $2', [balance, id]);
-        res.json({ success: true, message: "Solde mis à jour" });
-    } catch (err) {
-        res.status(500).json({ error: "Erreur lors de la mise à jour" });
-    }
-});
 
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 /* FIN DU CODE ADMIN - LA SUITE EST TON CODE EXISTANT (Route 7 : app.listen...)    */
