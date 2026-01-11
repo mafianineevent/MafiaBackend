@@ -429,6 +429,314 @@ app.delete('/admin/delete-coupon/:code', async (req, res) => {
 
 
 
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* SYSTÈME DE PROFIL & SOLDE - ROUTES À AJOUTER AU SERVEUR                          */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+/* ============================================================================= */
+/* PLACER CES ROUTES APRÈS LES ROUTES DE COUPONS ET AVANT app.listen()          */
+/* ============================================================================= */
+
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* AUTHENTIFICATION & GESTION DE PROFIL                                              */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+// A. Inscription (Register)
+app.post('/register', async (req, res) => {
+    const { telephone, password, email, username } = req.body;
+
+    // Validation
+    if (!telephone || !password) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Le téléphone et le mot de passe sont obligatoires." 
+        });
+    }
+
+    try {
+        // Vérifier si le téléphone existe déjà
+        const checkUser = await pool.query(
+            'SELECT * FROM users WHERE telephone = $1',
+            [telephone]
+        );
+
+        if (checkUser.rows.length > 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Ce numéro de téléphone est déjà utilisé." 
+            });
+        }
+
+        // Créer l'utilisateur (mot de passe en clair pour simplifier - à hasher en production !)
+        const result = await pool.query(
+            'INSERT INTO users (telephone, password, email, username, balance) VALUES ($1, $2, $3, $4, 0.00) RETURNING id, telephone, email, username, balance',
+            [telephone, password, email || null, username || null]
+        );
+
+        res.json({ 
+            success: true, 
+            message: "Compte créé avec succès !",
+            user: result.rows[0]
+        });
+
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// B. Connexion (Login)
+app.post('/login', async (req, res) => {
+    const { telephone, password } = req.body;
+
+    if (!telephone || !password) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Téléphone et mot de passe requis." 
+        });
+    }
+
+    try {
+        const result = await pool.query(
+            'SELECT id, telephone, email, username, balance, created_at FROM users WHERE telephone = $1 AND password = $2',
+            [telephone, password]
+        );
+
+        if (result.rows.length > 0) {
+            res.json({ 
+                success: true, 
+                message: "Connexion réussie !",
+                user: result.rows[0]
+            });
+        } else {
+            res.status(401).json({ 
+                success: false, 
+                message: "Téléphone ou mot de passe incorrect." 
+            });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// C. Récupérer les infos d'un utilisateur
+app.get('/user/:telephone', async (req, res) => {
+    const { telephone } = req.params;
+
+    try {
+        const result = await pool.query(
+            'SELECT id, telephone, email, username, balance, created_at FROM users WHERE telephone = $1',
+            [telephone]
+        );
+
+        if (result.rows.length > 0) {
+            res.json({ success: true, user: result.rows[0] });
+        } else {
+            res.status(404).json({ 
+                success: false, 
+                message: "Utilisateur introuvable." 
+            });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// D. Mettre à jour le profil
+app.post('/update-profile', async (req, res) => {
+    const { telephone, username, email, adresse } = req.body;
+
+    if (!telephone) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Téléphone requis." 
+        });
+    }
+
+    try {
+        const result = await pool.query(
+            'UPDATE users SET username = $1, email = $2, adresse = $3 WHERE telephone = $4 RETURNING id, telephone, email, username, balance, adresse',
+            [username || null, email || null, adresse || null, telephone]
+        );
+
+        if (result.rows.length > 0) {
+            res.json({ 
+                success: true, 
+                message: "Profil mis à jour !",
+                user: result.rows[0]
+            });
+        } else {
+            res.status(404).json({ 
+                success: false, 
+                message: "Utilisateur introuvable." 
+            });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* GESTION DU SOLDE & RECHARGE                                                       */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+// E. Recharger le solde (Simulation - en production, intégrer vraie API de paiement)
+app.post('/recharge-balance', async (req, res) => {
+    const { telephone, montant, mode_paiement } = req.body;
+
+    if (!telephone || !montant || montant <= 0) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Téléphone et montant valide requis." 
+        });
+    }
+
+    try {
+        // Ajouter le montant au solde
+        const result = await pool.query(
+            'UPDATE users SET balance = balance + $1 WHERE telephone = $2 RETURNING id, telephone, balance',
+            [montant, telephone]
+        );
+
+        if (result.rows.length > 0) {
+            res.json({ 
+                success: true, 
+                message: `Recharge de ${montant} Fcfa effectuée avec ${mode_paiement} !`,
+                user: result.rows[0]
+            });
+        } else {
+            res.status(404).json({ 
+                success: false, 
+                message: "Utilisateur introuvable." 
+            });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// F. Payer un ticket avec le solde
+app.post('/pay-with-balance', async (req, res) => {
+    const { telephone, ticket_id_public, montant } = req.body;
+
+    if (!telephone || !ticket_id_public || !montant || montant <= 0) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Téléphone, ID ticket et montant requis." 
+        });
+    }
+
+    try {
+        // 1. Vérifier le solde de l'utilisateur
+        const userCheck = await pool.query(
+            'SELECT balance FROM users WHERE telephone = $1',
+            [telephone]
+        );
+
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                message: "Utilisateur introuvable." 
+            });
+        }
+
+        const soldeActuel = parseFloat(userCheck.rows[0].balance);
+
+        if (soldeActuel < montant) {
+            return res.status(400).json({ 
+                success: false, 
+                message: `Solde insuffisant. Vous avez ${soldeActuel.toFixed(2)} Fcfa, il vous manque ${(montant - soldeActuel).toFixed(2)} Fcfa.` 
+            });
+        }
+
+        // 2. Vérifier que le ticket existe
+        const ticketCheck = await pool.query(
+            'SELECT * FROM tickets WHERE ticket_id_public = $1',
+            [ticket_id_public.toUpperCase()]
+        );
+
+        if (ticketCheck.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                message: "Ticket introuvable." 
+            });
+        }
+
+        const ticket = ticketCheck.rows[0];
+        const prixTotal = parseFloat(ticket.prix_total);
+        const montantPaye = parseFloat(ticket.montant_paye);
+        const resteAPayer = prixTotal - montantPaye;
+
+        // 3. Calculer le montant à appliquer
+        const montantAAppliquer = Math.min(montant, resteAPayer);
+
+        // 4. Débiter le solde de l'utilisateur
+        await pool.query(
+            'UPDATE users SET balance = balance - $1 WHERE telephone = $2',
+            [montantAAppliquer, telephone]
+        );
+
+        // 5. Créditer le ticket
+        await pool.query(
+            'UPDATE tickets SET montant_paye = montant_paye + $1 WHERE ticket_id_public = $2',
+            [montantAAppliquer, ticket_id_public.toUpperCase()]
+        );
+
+        // 6. Vérifier si le ticket est maintenant payé
+        const nouveauMontant = montantPaye + montantAAppliquer;
+        if (nouveauMontant >= prixTotal) {
+            await pool.query(
+                "UPDATE tickets SET statut = 'paye' WHERE ticket_id_public = $1",
+                [ticket_id_public.toUpperCase()]
+            );
+        }
+
+        // 7. Récupérer les données mises à jour
+        const updatedUser = await pool.query(
+            'SELECT balance FROM users WHERE telephone = $1',
+            [telephone]
+        );
+
+        const updatedTicket = await pool.query(
+            'SELECT * FROM tickets WHERE ticket_id_public = $1',
+            [ticket_id_public.toUpperCase()]
+        );
+
+        res.json({ 
+            success: true, 
+            message: `Paiement de ${montantAAppliquer.toFixed(2)} Fcfa effectué !`,
+            nouveau_solde: parseFloat(updatedUser.rows[0].balance).toFixed(2),
+            ticket: updatedTicket.rows[0]
+        });
+
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// G. Historique des tickets d'un utilisateur
+app.get('/user-tickets/:telephone', async (req, res) => {
+    const { telephone } = req.params;
+
+    try {
+        const result = await pool.query(
+            'SELECT * FROM tickets WHERE telephone_client = $1 ORDER BY created_at DESC',
+            [telephone]
+        );
+
+        res.json({ 
+            success: true, 
+            tickets: result.rows 
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* FIN DES ROUTES PROFIL & SOLDE                                                     */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+
 
 
 
