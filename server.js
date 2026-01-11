@@ -98,7 +98,7 @@ app.get('/', (req, res) => res.send("MafiaBackend Billetterie en ligne !"));
 app.post('/quick-buy', async (req, res) => {
     const { event_name, telephone, prix_total } = req.body;
     // Génère un ID unique comme "9E-A1B2C"
-    const ticket_id_public = "9E-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    const ticket_id_public = "9E-" + Math.random().toString(36).substring(2, 12).toUpperCase();
 
     try {
         const result = await pool.query(
@@ -264,7 +264,7 @@ app.post('/admin/create-coupon', async (req, res) => {
     }
     
     // Génère un code unique comme "CPN-A1B2C"
-    const code_coupon = "CPN-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    const code_coupon = "CPN-" + Math.random().toString(36).substring(2, 12).toUpperCase();
     
     try {
         const result = await pool.query(
