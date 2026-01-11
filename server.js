@@ -51,6 +51,27 @@ const initDB = async () => {
             );
         `);
 
+
+
+
+         // 3. Table Coupons (Système de monnaie alternative)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS coupons (
+                id SERIAL PRIMARY KEY,
+                code_coupon TEXT UNIQUE NOT NULL,
+                montant DECIMAL(15,2) NOT NULL,
+                utilise BOOLEAN DEFAULT FALSE,
+                utilise_par TEXT,
+                ticket_id TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                used_at TIMESTAMP
+            );
+        `);
+
+
+
+        
+
         // 3. FORCE L'AJOUT DES COLONNES SI ELLES MANQUENT (Pour le Panel Admin)
         await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
         await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS statut TEXT DEFAULT 'en_attente';`);
@@ -219,6 +240,196 @@ app.delete('/admin/delete-ticket/:id_public', async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 });
+
+
+
+
+
+
+
+
+
+
+
+* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* SYSTÈME DE COUPONS : CRÉATION & GESTION                                          */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+// A. Créer un coupon (Admin)
+app.post('/admin/create-coupon', async (req, res) => {
+    const { montant } = req.body;
+    
+    if (!montant || montant <= 0) {
+        return res.status(400).json({ success: false, message: "Montant invalide." });
+    }
+    
+    // Génère un code unique comme "CPN-A1B2C"
+    const code_coupon = "CPN-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    
+    try {
+        const result = await pool.query(
+            'INSERT INTO coupons (code_coupon, montant) VALUES ($1, $2) RETURNING *',
+            [code_coupon, montant]
+        );
+        res.json({ success: true, coupon: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// B. Liste de tous les coupons (Admin)
+app.get('/admin/coupons', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM coupons ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// C. Vérifier un coupon (Client)
+app.get('/coupon-status/:code', async (req, res) => {
+    const { code } = req.params;
+    
+    try {
+        const result = await pool.query(
+            'SELECT code_coupon, montant, utilise FROM coupons WHERE code_coupon = $1',
+            [code.toUpperCase()]
+        );
+        
+        if (result.rows.length > 0) {
+            const coupon = result.rows[0];
+            
+            if (coupon.utilise) {
+                res.json({ 
+                    success: false, 
+                    message: "Ce coupon a déjà été utilisé." 
+                });
+            } else {
+                res.json({ 
+                    success: true, 
+                    coupon: coupon 
+                });
+            }
+        } else {
+            res.status(404).json({ 
+                success: false, 
+                message: "Coupon invalide." 
+            });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// D. Utiliser un coupon pour payer un ticket
+app.post('/use-coupon', async (req, res) => {
+    const { code_coupon, ticket_id_public } = req.body;
+    
+    try {
+        // 1. Vérifier que le coupon existe et n'est pas utilisé
+        const couponCheck = await pool.query(
+            'SELECT * FROM coupons WHERE code_coupon = $1 AND utilise = FALSE',
+            [code_coupon.toUpperCase()]
+        );
+        
+        if (couponCheck.rows.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Coupon invalide ou déjà utilisé." 
+            });
+        }
+        
+        const coupon = couponCheck.rows[0];
+        
+        // 2. Vérifier que le ticket existe
+        const ticketCheck = await pool.query(
+            'SELECT * FROM tickets WHERE ticket_id_public = $1',
+            [ticket_id_public.toUpperCase()]
+        );
+        
+        if (ticketCheck.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                message: "Ticket introuvable." 
+            });
+        }
+        
+        const ticket = ticketCheck.rows[0];
+        const montantCoupon = parseFloat(coupon.montant);
+        const prixTotal = parseFloat(ticket.prix_total);
+        const montantPaye = parseFloat(ticket.montant_paye);
+        const resteAPayer = prixTotal - montantPaye;
+        
+        // 3. Calculer le montant à appliquer (ne pas dépasser le reste à payer)
+        const montantAAppliquer = Math.min(montantCoupon, resteAPayer);
+        
+        // 4. Mettre à jour le ticket
+        await pool.query(
+            'UPDATE tickets SET montant_paye = montant_paye + $1 WHERE ticket_id_public = $2',
+            [montantAAppliquer, ticket_id_public.toUpperCase()]
+        );
+        
+        // 5. Marquer le coupon comme utilisé
+        await pool.query(
+            'UPDATE coupons SET utilise = TRUE, utilise_par = $1, ticket_id = $2, used_at = CURRENT_TIMESTAMP WHERE code_coupon = $3',
+            [ticket.telephone_client, ticket_id_public.toUpperCase(), code_coupon.toUpperCase()]
+        );
+        
+        // 6. Vérifier si le ticket est maintenant complètement payé
+        const nouveauMontant = montantPaye + montantAAppliquer;
+        if (nouveauMontant >= prixTotal) {
+            await pool.query(
+                "UPDATE tickets SET statut = 'paye' WHERE ticket_id_public = $1",
+                [ticket_id_public.toUpperCase()]
+            );
+        }
+        
+        // 7. Récupérer le ticket mis à jour
+        const updatedTicket = await pool.query(
+            'SELECT * FROM tickets WHERE ticket_id_public = $1',
+            [ticket_id_public.toUpperCase()]
+        );
+        
+        res.json({ 
+            success: true, 
+            message: `Coupon de ${montantAAppliquer.toFixed(2)} Fcfa appliqué avec succès !`,
+            ticket: updatedTicket.rows[0],
+            montantApplique: montantAAppliquer
+        });
+        
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// E. Supprimer un coupon (Admin)
+app.delete('/admin/delete-coupon/:code', async (req, res) => {
+    const { code } = req.params;
+    
+    try {
+        const result = await pool.query(
+            'DELETE FROM coupons WHERE code_coupon = $1',
+            [code.toUpperCase()]
+        );
+        
+        if (result.rowCount > 0) {
+            res.json({ success: true, message: "Coupon supprimé avec succès." });
+        } else {
+            res.status(404).json({ success: false, message: "Coupon introuvable." });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+/* FIN DU CODE COUPONS                                                              */
+/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
+
+
+
+
 
 
 
