@@ -11,6 +11,11 @@ const app = express();
 // 1. Activation de CORS pour autoriser ton site à parler au serveur
 app.use(cors());
 app.use(express.json());
+// ✅ Healthcheck (léger) - utile pour GitHub Actions / monitoring
+app.get('/health', (req, res) => {
+  res.status(200).send('ok');
+});
+
 
 // 2. Configuration PostgreSQL avec SSL forcé pour Render
 const pool = new Pool({
