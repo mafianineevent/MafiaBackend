@@ -719,7 +719,24 @@ app.post('/pay-with-balance', async (req, res) => {
 
 
 
+// ROUTE ADMIN : SUPPRIMER UTILISATEUR ET SES TICKETS
+app.delete('/admin/delete-user/:telephone', async (req, res) => {
+    const { telephone } = req.params;
+    try {
+        // 1. On supprime les tickets d'abord (important pour PostgreSQL)
+        await pool.query('DELETE FROM tickets WHERE telephone_client = $1', [telephone]);
+        // 2. On supprime l'utilisateur
+        const result = await pool.query('DELETE FROM users WHERE telephone = $1', [telephone]);
 
+        if (result.rowCount > 0) {
+            res.json({ success: true, message: "Utilisateur supprimé." });
+        } else {
+            res.status(404).json({ success: false, message: "Utilisateur non trouvé." });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 
 
