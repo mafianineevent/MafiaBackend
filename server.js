@@ -518,6 +518,7 @@ app.post('/login', async (req, res) => {
     }
 });
 
+
 // C. Récupérer les infos d'un utilisateur
 app.get('/user/:telephone', async (req, res) => {
     const { telephone } = req.params;
