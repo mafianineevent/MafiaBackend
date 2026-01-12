@@ -715,23 +715,6 @@ app.post('/pay-with-balance', async (req, res) => {
 });
 
 // G. Historique des tickets d'un utilisateur
-app.get('/user-tickets/:telephone', async (req, res) => {
-    const { telephone } = req.params;
-
-    try {
-        const result = await pool.query(
-            'SELECT * FROM tickets WHERE telephone_client = $1 ORDER BY created_at DESC',
-            [telephone]
-        );
-
-        res.json({ 
-            success: true, 
-            tickets: result.rows 
-        });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
 
 
 
@@ -742,27 +725,8 @@ app.get('/user-tickets/:telephone', async (req, res) => {
 
 
 
-// 👤 Récupérer un utilisateur
-app.get('/user/:telephone', async (req, res) => {
-    const { telephone } = req.params;
 
-    try {
-        const result = await pool.query(
-            `SELECT telephone, username, email, balance, created_at
-             FROM users
-             WHERE telephone = $1`,
-            [telephone]
-        );
 
-        if (result.rows.length === 0) {
-            return res.json({ success: false, message: "Utilisateur introuvable" });
-        }
-
-        res.json({ success: true, user: result.rows[0] });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
 
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 /* FIN DES ROUTES PROFIL & SOLDE                                                     */
