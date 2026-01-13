@@ -80,7 +80,12 @@ const initDB = async () => {
         // 3. FORCE L'AJOUT DES COLONNES SI ELLES MANQUENT (Pour le Panel Admin)
         await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
         await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS statut TEXT DEFAULT 'en_attente';`);
-        
+
+      await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS statut TEXT DEFAULT 'en_attente';`);
+
+
+      
         console.log("✅ Base de données mise à jour et prête !");
     } catch (err) {
         console.error("❌ Erreur lors de l'initialisation DB:", err.message);
@@ -101,15 +106,24 @@ app.get('/', (req, res) => res.send("MafiaBackend Billetterie en ligne !"));
 
 // A. Route de création du ticket (Achat rapide)
 app.post('/quick-buy', async (req, res) => {
-    const { event_name, telephone, prix_total } = req.body;
+    const { event_name, telephone, prix_total, ticket_type_id, ticket_type_label } = req.body;
+
+    // Fallback si le front n'envoie pas encore
+    const safeTypeId = ticket_type_id || 'standard';
+    const safeTypeLabel = ticket_type_label || 'Standard';
+
     // Génère un ID unique comme "9E-A1B2C"
     const ticket_id_public = "9E-" + Math.random().toString(36).substring(2, 12).toUpperCase();
 
     try {
         const result = await pool.query(
-            'INSERT INTO tickets (ticket_id_public, event_name, telephone_client, prix_total) VALUES ($1, $2, $3, $4) RETURNING *',
-            [ticket_id_public, event_name, telephone, prix_total]
+            `INSERT INTO tickets 
+                (ticket_id_public, event_name, telephone_client, prix_total, ticket_type_id, ticket_type_label) 
+             VALUES ($1, $2, $3, $4, $5, $6) 
+             RETURNING *`,
+            [ticket_id_public, event_name, telephone, prix_total, safeTypeId, safeTypeLabel]
         );
+
         res.json({ success: true, ticket: result.rows[0] });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -127,10 +141,14 @@ app.get('/ticket-status/:id_public', async (req, res) => {
 
     try {
         // On cherche le ticket dans la table par son ID public (ex: 9E-A1B2C)
-        const result = await pool.query(
-            'SELECT ticket_id_public, event_name, telephone_client, prix_total, montant_paye, statut FROM tickets WHERE ticket_id_public = $1',
-            [id_public.toUpperCase()] // On force la majuscule pour éviter les erreurs de saisie
-        );
+       const result = await pool.query(
+  `SELECT ticket_id_public, event_name, telephone_client, prix_total, montant_paye, statut,
+          ticket_type_id, ticket_type_label
+   FROM tickets
+   WHERE ticket_id_public = $1`,
+  [id_public.trim().toUpperCase()]
+);
+
 
         if (result.rows.length > 0) {
             // Si le ticket existe, on le renvoie au client
