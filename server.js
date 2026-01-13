@@ -198,19 +198,41 @@ app.get('/ticket-status/:id_public', async (req, res) => {
 
 // B. Route de paiement partiel par ID
 app.post('/pay-partial', async (req, res) => {
+    // ✅ Protection simple : seul l'admin peut appeler cet endpoint
+    const adminKey = process.env.ADMIN_KEY; // Mets ça sur Render (Environment Variables)
+    const providedKey = req.headers['x-admin-key'];
+
+    if (!adminKey || providedKey !== adminKey) {
+        return res.status(403).json({
+            success: false,
+            message: "Accès refusé."
+        });
+    }
+
     const { ticket_id_public, montant } = req.body;
+
+    // Sécurités
+    const safeId = (ticket_id_public || "").toString().trim().toUpperCase();
+    const safeMontant = Number(montant);
+
+    if (!safeId || !Number.isFinite(safeMontant) || safeMontant <= 0) {
+        return res.status(400).json({ success: false, message: "Données invalides." });
+    }
+
     try {
         const result = await pool.query(
             'UPDATE tickets SET montant_paye = montant_paye + $1 WHERE ticket_id_public = $2 RETURNING *',
-            [montant, ticket_id_public]
+            [safeMontant, safeId]
         );
-        
+
         const ticket = result.rows[0];
-        if (ticket.montant_paye >= ticket.prix_total) {
-            await pool.query("UPDATE tickets SET statut = 'paye' WHERE ticket_id_public = $1", [ticket_id_public]);
+        if (!ticket) return res.status(404).json({ success: false, message: "Ticket introuvable." });
+
+        if (Number(ticket.montant_paye) >= Number(ticket.prix_total)) {
+            await pool.query("UPDATE tickets SET statut = 'paye' WHERE ticket_id_public = $1", [safeId]);
         }
-        
-        res.json({ success: true, ticket: ticket });
+
+        res.json({ success: true, ticket });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
