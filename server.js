@@ -84,6 +84,8 @@ const initDB = async () => {
       await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
 await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS statut TEXT DEFAULT 'en_attente';`);
 
+await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_type_id TEXT DEFAULT 'standard';`);
+await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_type_label TEXT DEFAULT 'Standard';`);
 
       
         console.log("✅ Base de données mise à jour et prête !");
@@ -106,28 +108,48 @@ app.get('/', (req, res) => res.send("MafiaBackend Billetterie en ligne !"));
 
 // A. Route de création du ticket (Achat rapide)
 app.post('/quick-buy', async (req, res) => {
-    const { event_name, telephone, prix_total, ticket_type_id, ticket_type_label } = req.body;
+  const {
+    event_name,
+    telephone,
+    prix_total,
+    ticket_type_id,
+    ticket_type_label
+  } = req.body;
 
-    // Fallback si le front n'envoie pas encore
-    const safeTypeId = ticket_type_id || 'standard';
-    const safeTypeLabel = ticket_type_label || 'Standard';
+  // ✅ sécurités simples
+  const safeTypeId = (ticket_type_id || 'standard').toString().trim();
+  const safeTypeLabel = (ticket_type_label || 'Standard').toString().trim();
+  const safePhone = (telephone || '').toString().trim();
+  const safeEvent = (event_name || '').toString().trim();
+  const safePrice = Number(prix_total);
 
-    // Génère un ID unique comme "9E-A1B2C"
-    const ticket_id_public = "9E-" + Math.random().toString(36).substring(2, 12).toUpperCase();
+  if (!safeEvent || !safePhone || !Number.isFinite(safePrice) || safePrice <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Données invalides (event_name / telephone / prix_total)."
+    });
+  }
 
-    try {
-        const result = await pool.query(
-            `INSERT INTO tickets 
-                (ticket_id_public, event_name, telephone_client, prix_total, ticket_type_id, ticket_type_label) 
-             VALUES ($1, $2, $3, $4, $5, $6) 
-             RETURNING *`,
-            [ticket_id_public, event_name, telephone, prix_total, safeTypeId, safeTypeLabel]
-        );
+  const ticket_id_public = "9E-" + Math.random().toString(36).substring(2, 12).toUpperCase();
 
-        res.json({ success: true, ticket: result.rows[0] });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+  try {
+    const result = await pool.query(
+      `INSERT INTO tickets
+        (ticket_id_public, event_name, telephone_client, prix_total, ticket_type_id, ticket_type_label)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [ticket_id_public, safeEvent, safePhone, safePrice, safeTypeId, safeTypeLabel]
+    );
+
+    res.json({ success: true, ticket: result.rows[0] });
+  } catch (err) {
+    console.error("Erreur /quick-buy:", err);
+    res.status(500).json({
+      success: false,
+      message: "Impossible de réserver (erreur serveur).",
+      error: err.message
+    });
+  }
 });
 
 
