@@ -536,7 +536,7 @@ app.post('/register', async (req, res) => {
 
         // Créer l'utilisateur (mot de passe en clair pour simplifier - à hasher en production !)
         const result = await pool.query(
-            'INSERT INTO users (telephone, password, email, username, balance) VALUES ($1, $2, $3, $4, 0.00) RETURNING id, telephone, email, username, balance',
+            'INSERT INTO users (telephone, password, email, username, balance) VALUES ($1, $2, $3, $4, 0.00) RETURNING id, telephone, email, username, balance, created_at',
             [telephone, password, email || null, username || null]
         );
 
