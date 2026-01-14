@@ -817,55 +817,6 @@ app.delete('/admin/delete-user/:telephone', async (req, res) => {
 /* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
 
 
-/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
-/* ROUTE : RÉCUPÉRER LES TICKETS D'UN UTILISATEUR                                    */
-/* À AJOUTER DANS server.js APRÈS LA ROUTE /user/:telephone                         */
-/* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX */
-
-// G. Historique des tickets d'un utilisateur
-app.get('/user-tickets/:telephone', async (req, res) => {
-    const { telephone } = req.params;
-    
-    console.log('🎫 Recherche tickets pour:', telephone);
-    
-    if (!telephone) {
-        return res.status(400).json({ 
-            success: false, 
-            message: "Téléphone requis." 
-        });
-    }
-    
-    try {
-        const result = await pool.query(
-            `SELECT 
-                ticket_id_public, 
-                event_name, 
-                prix_total, 
-                montant_paye, 
-                statut, 
-                created_at,
-                ticket_type_label
-             FROM tickets 
-             WHERE telephone_client = $1 
-             ORDER BY created_at DESC`,
-            [telephone]
-        );
-        
-        console.log(`✅ ${result.rows.length} tickets trouvés pour ${telephone}`);
-        
-        res.json({ 
-            success: true, 
-            tickets: result.rows 
-        });
-    } catch (err) {
-        console.error('❌ Erreur récupération tickets:', err);
-        res.status(500).json({ 
-            success: false, 
-            error: err.message 
-        });
-    }
-});
-
 
 
 
